@@ -12,7 +12,7 @@ function SignInForm() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
     setError('')
@@ -92,8 +92,14 @@ function SignInForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white font-semibold rounded-xl py-3.5 shadow-md shadow-gray-900/10 transition-all active:scale-[0.98] mt-4"
+            className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-70 text-white font-semibold rounded-xl py-3.5 shadow-md shadow-gray-900/10 transition-all active:scale-[0.98] mt-4 flex items-center justify-center gap-2"
           >
+            {loading && (
+              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
