@@ -7,6 +7,7 @@ export interface ITrade extends Document {
   entryTime: string
   exitTime: string
   symbol: typeof SYMBOLS[number]
+  direction: 'BUY' | 'SELL'
   type: 'CE' | 'PE'
   expiry: Date
   strike: number
@@ -34,6 +35,7 @@ const TradeSchema = new Schema<ITrade>(
     entryTime: { type: String, required: true },
     exitTime: { type: String, required: true },
     symbol: { type: String, enum: SYMBOLS, required: true },
+    direction: { type: String, enum: ['BUY', 'SELL'], required: true },
     type: { type: String, enum: ['CE', 'PE'], required: true },
     expiry: { type: Date, required: true },
     strike: { type: Number, required: true },

@@ -24,17 +24,20 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const {
-      date, day, entryTime, exitTime, symbol, type, expiry,
+      date, day, entryTime, exitTime, symbol, direction, type, expiry,
       strike, lots, lotSize, entry, exit, charges,
       setupValid, rulesFollowed, notes
     } = body
 
     // Validate required fields
-    if (!date || !day || !entryTime || !exitTime || !symbol || !type || !expiry || !strike || !lots || !lotSize || !entry || !exit || charges === undefined) {
+    if (!date || !day || !entryTime || !exitTime || !symbol || !direction || !type || !expiry || !strike || !lots || !lotSize || !entry || !exit || charges === undefined) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const grossPnL = (exit - entry) * lots * lotSize
+    const grossPnL = direction === 'BUY'
+      ? (exit - entry) * lots * lotSize
+      : (entry - exit) * lots * lotSize
+
     const netPnL = grossPnL - charges
 
     await connectDB()
@@ -45,6 +48,7 @@ export async function POST(req: NextRequest) {
       entryTime,
       exitTime,
       symbol,
+      direction,
       type,
       expiry: new Date(expiry),
       strike,

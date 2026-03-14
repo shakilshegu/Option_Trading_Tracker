@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { connectDB } from '@/lib/mongodb'
 import Trade from '@/models/Trade'
+import User from '@/models/User'
+import bcrypt from 'bcryptjs'
 
 async function getOwned(id: string, userId: string) {
   await connectDB()
@@ -62,16 +64,44 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   try {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // We must read the body from the request to get the password
+    let body;
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Missing request body' }, { status: 400 })
+    }
+
+    const { password } = body
+    if (!password) {
+      return NextResponse.json({ error: 'Password is required to delete a trade' }, { status: 400 })
+    }
+
+    // Verify Password Against User in DB
+    await connectDB()
+    const user = await User.findById(session.user.id)
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    const isValid = await bcrypt.compare(password, user.password)
+    if (!isValid) {
+      return NextResponse.json({ error: 'Incorrect password' }, { status: 403 })
+    }
+
     const trade = await getOwned(id, session.user.id)
-    if (!trade) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!trade) return NextResponse.json({ error: 'Trade not found' }, { status: 404 })
+
     await trade.deleteOne()
     return NextResponse.json({ message: 'Deleted' })
-  } catch {
+  } catch (error) {
+    console.error('DELETE_TRADE_ERROR:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

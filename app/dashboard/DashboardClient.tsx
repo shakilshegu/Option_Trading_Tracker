@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { signOut } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 
@@ -10,6 +10,7 @@ interface Trade {
   entryTime: string
   exitTime: string
   symbol: string
+  direction: 'BUY' | 'SELL'
   type: string
   expiry: string
   strike: number
@@ -40,8 +41,16 @@ export default function DashboardClient({
   // Modal States
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
 
+  // Delete Confirmation State
+  const [tradeToDelete, setTradeToDelete] = useState<string | null>(null)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
   // Filtering states
-  const [filterPeriod, setFilterPeriod] = useState<'all' | 'today' | 'weekly' | 'monthly' | 'custom'>('all')
+  const [filterPeriod, setFilterPeriod] = useState<'all' | 'today' | 'weekly' | 'monthly' | 'custom' | 'profitable' | 'loss'>('all')
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false)
+  const filterMenuRef = useRef<HTMLDivElement>(null)
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
@@ -50,6 +59,7 @@ export default function DashboardClient({
     entryTime: '',
     exitTime: '',
     symbol: 'NIFTY',
+    direction: 'BUY' as 'BUY' | 'SELL',
     type: 'CE' as 'CE' | 'PE',
     expiry: new Date().toISOString().split('T')[0],
     strike: '',
@@ -63,13 +73,17 @@ export default function DashboardClient({
     notes: '',
   })
 
-  const lotsNum = Number(form.lots) || 0
-  const lotSizeNum = Number(form.lotSize) || 0
-  const entryNum = Number(form.entry) || 0
-  const exitNum = Number(form.exit) || 0
-  const chargesNum = Number(form.charges) || 0
-  const grossPnLCalc = (exitNum - entryNum) * lotsNum * lotSizeNum
-  const netPnLCalc = grossPnLCalc - chargesNum
+  const validLots = Number(form.lots) || 0
+  const validLotSize = Number(form.lotSize) || 0
+  const validEntry = Number(form.entry) || 0
+  const validExit = Number(form.exit) || 0
+  const validCharges = Number(form.charges) || 0
+
+  const grossPnLCalc = form.direction === 'BUY'
+    ? (validExit - validEntry) * validLots * validLotSize
+    : (validEntry - validExit) * validLots * validLotSize
+
+  const netPnLCalc = grossPnLCalc - validCharges
 
   // Simple toast auto-hide
   useEffect(() => {
@@ -83,15 +97,35 @@ export default function DashboardClient({
     setToast({ message, type })
   }
 
-  async function deleteTrade(id: string) {
-    if (!confirm('Are you sure you want to delete this trade?')) return
-    const res = await fetch(`/api/trades/${id}`, { method: 'DELETE' })
+  function promptDeleteTrade(id: string) {
+    setTradeToDelete(id)
+    setDeletePassword('')
+  }
+
+  async function confirmDeleteTrade() {
+    if (!tradeToDelete) return
+    if (!deletePassword) {
+      showToast('Please enter your password', 'error')
+      return
+    }
+
+    setIsDeleting(true)
+    const res = await fetch(`/api/trades/${tradeToDelete}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: deletePassword })
+    })
+
     if (res.ok) {
       showToast('Trade deleted successfully', 'success')
+      setTradeToDelete(null)
+      setDeletePassword('')
       router.refresh()
     } else {
-      showToast('Failed to delete trade', 'error')
+      const data = await res.json()
+      showToast(data.error || 'Failed to delete trade', 'error')
     }
+    setIsDeleting(false)
   }
 
   async function handleAddTrade(e: React.FormEvent) {
@@ -148,6 +182,17 @@ export default function DashboardClient({
     setCurrentPage(1)
   }, [filterPeriod, customStart, customEnd])
 
+  // Close filter dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) {
+        setIsFilterMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   // Derived filtered trades
   const filteredTrades = useMemo(() => {
     return trades.filter((t) => {
@@ -177,6 +222,10 @@ export default function DashboardClient({
           isValid = isValid && tradeDate <= new Date(customEnd)
         }
         return isValid
+      } else if (filterPeriod === 'profitable') {
+        return (t.netPnL ?? 0) > 0
+      } else if (filterPeriod === 'loss') {
+        return (t.netPnL ?? 0) < 0
       }
       return true
     })
@@ -230,7 +279,7 @@ export default function DashboardClient({
     <div className="min-h-screen bg-gray-50/50 text-gray-900 font-sans relative">
       {/* Toast Notification */}
       {toast && (
-        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-xl font-medium text-sm transition-all animate-fade-in-down ${toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-lg shadow-xl font-medium text-sm transition-all animate-fade-in-down ${toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
           }`}>
           {toast.message}
         </div>
@@ -258,18 +307,20 @@ export default function DashboardClient({
 
         {/* Controls Row */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 relative" ref={filterMenuRef}>
             <span className="text-sm font-semibold text-gray-600 mr-2">Filter:</span>
             {[
               { id: 'all', label: 'All Time' },
               { id: 'today', label: 'Today' },
               { id: 'weekly', label: '7 Days' },
               { id: 'monthly', label: 'This Month' },
-              { id: 'custom', label: 'Custom' },
             ].map(f => (
               <button
                 key={f.id}
-                onClick={() => setFilterPeriod(f.id as any)}
+                onClick={() => {
+                  setFilterPeriod(f.id as any)
+                  setIsFilterMenuOpen(false)
+                }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${filterPeriod === f.id ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
               >
@@ -277,21 +328,64 @@ export default function DashboardClient({
               </button>
             ))}
 
-            {filterPeriod === 'custom' && (
-              <div className="flex items-center gap-2 ml-2 animate-fade-in">
-                <input
-                  type="date"
-                  value={customStart}
-                  onChange={(e) => setCustomStart(e.target.value)}
-                  className="rounded border border-gray-300 bg-gray-50 text-xs px-2 py-1.5"
-                />
-                <span className="text-gray-400 text-xs">to</span>
-                <input
-                  type="date"
-                  value={customEnd}
-                  onChange={(e) => setCustomEnd(e.target.value)}
-                  className="rounded border border-gray-300 bg-gray-50 text-xs px-2 py-1.5"
-                />
+            {/* Advanced Filters Dropdown button */}
+            <button
+              onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${['profitable', 'loss', 'custom'].includes(filterPeriod) || isFilterMenuOpen
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+              Advanced
+            </button>
+
+            {/* Dropdown Menu */}
+            {isFilterMenuOpen && (
+              <div className="absolute top-full lg:left-full mt-2 lg:ml-2 bg-white border border-gray-100 shadow-xl rounded-xl p-3 z-20 min-w-[200px] animate-fade-in-down">
+                <div className="flex flex-col gap-1.5">
+                  <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider px-2 py-1">Outcome</h4>
+                  <button
+                    onClick={() => { setFilterPeriod('profitable'); setIsFilterMenuOpen(false); }}
+                    className={`text-left px-3 py-1.5 text-xs font-medium rounded-md hover:bg-gray-50 transition-colors ${filterPeriod === 'profitable' ? 'text-indigo-600 bg-indigo-50/50' : 'text-gray-700'}`}
+                  >
+                    Most Profitable
+                  </button>
+                  <button
+                    onClick={() => { setFilterPeriod('loss'); setIsFilterMenuOpen(false); }}
+                    className={`text-left px-3 py-1.5 text-xs font-medium rounded-md hover:bg-gray-50 transition-colors ${filterPeriod === 'loss' ? 'text-indigo-600 bg-indigo-50/50' : 'text-gray-700'}`}
+                  >
+                    Most Loss
+                  </button>
+
+                  <div className="h-px bg-gray-100 my-1"></div>
+
+                  <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider px-2 py-1">Time Range</h4>
+                  <button
+                    onClick={() => setFilterPeriod('custom')}
+                    className={`text-left px-3 py-1.5 text-xs font-medium rounded-md hover:bg-gray-50 transition-colors ${filterPeriod === 'custom' ? 'text-indigo-600 bg-indigo-50/50' : 'text-gray-700'}`}
+                  >
+                    Custom Dates
+                  </button>
+
+                  {filterPeriod === 'custom' && (
+                    <div className="flex flex-col gap-2 mt-1 px-2 pb-1">
+                      <input
+                        type="date"
+                        value={customStart}
+                        onChange={(e) => setCustomStart(e.target.value)}
+                        className="rounded border border-gray-300 bg-gray-50 text-[11px] px-2 py-1.5 w-full focus:ring-1 focus:ring-indigo-500"
+                      />
+                      <span className="text-gray-400 text-[10px] text-center">to</span>
+                      <input
+                        type="date"
+                        value={customEnd}
+                        onChange={(e) => setCustomEnd(e.target.value)}
+                        className="rounded border border-gray-300 bg-gray-50 text-[11px] px-2 py-1.5 w-full focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -377,6 +471,10 @@ export default function DashboardClient({
                         </td>
                         <td className="py-3 px-4 align-top max-w-[250px] border-r border-gray-200">
                           <div className="flex items-center gap-1.5 mb-1 text-xs">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${trade.direction === 'BUY' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-purple-100 text-purple-700 border border-purple-200'
+                              }`}>
+                              {trade.direction === 'BUY' ? 'B' : 'S'}
+                            </span>
                             <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${trade.type === 'CE' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'
                               }`}>
                               {trade.type}
@@ -413,7 +511,7 @@ export default function DashboardClient({
                               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                             </button>
                             <button
-                              onClick={() => deleteTrade(trade._id)}
+                              onClick={() => setTradeToDelete(trade._id)}
                               title="Delete Trade"
                               className="text-gray-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50 transition-colors inline-flex justify-center"
                             >
@@ -467,6 +565,87 @@ export default function DashboardClient({
           )}
         </div>
       </main>
+
+      {/* Delete Confirmation Modal */}
+      {tradeToDelete && (
+        <div className="fixed inset-0 bg-gray-900/60 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-scale-in border border-gray-100">
+            <div className="p-6">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-4 mx-auto">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-600"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 text-center mb-2">Delete Trade?</h2>
+              <p className="text-sm text-gray-500 text-center mb-6">
+                This action cannot be undone. Please enter your login password to confirm deletion.
+              </p>
+
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">Enter Password</label>
+                  <button
+                    onClick={() => {
+                      showToast('To reset your password, please sign out and use the forgot password flow (if implemented) or contact support.', 'error')
+                    }}
+                    className="text-[10px] text-indigo-600 font-semibold hover:underline"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    className="w-full rounded-lg border-gray-300 bg-gray-50/50 text-sm focus:ring-2 focus:ring-red-500 p-2.5 pr-10 border transition-all"
+                    placeholder="••••••••"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1"
+                    title={showPassword ? "Hide Password" : "Show Password"}
+                  >
+                    {showPassword ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setTradeToDelete(null)
+                    setDeletePassword('')
+                    setShowPassword(false)
+                  }}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200 transition-all text-sm disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteTrade}
+                  disabled={isDeleting || !deletePassword}
+                  className="flex-1 px-4 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 shadow-md shadow-red-500/30 transition-all text-sm flex justify-center items-center disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  ) : (
+                    'Delete'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal - New Trade */}
       {isModalOpen && (
@@ -531,6 +710,17 @@ export default function DashboardClient({
               </div>
 
               <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Direction</label>
+                  <select
+                    value={form.direction}
+                    onChange={(e) => setForm({ ...form, direction: e.target.value as 'BUY' | 'SELL' })}
+                    className="w-full rounded-lg border-gray-300 bg-gray-50 text-sm focus:ring-2 focus:ring-indigo-500 p-2 border"
+                  >
+                    <option value="BUY">Buy (Long)</option>
+                    <option value="SELL">Sell (Short)</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
                   <select
@@ -699,6 +889,10 @@ export default function DashboardClient({
               <div>
                 <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                   {selectedTrade.symbol}
+                  <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${selectedTrade.direction === 'BUY' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                    }`}>
+                    {selectedTrade.direction === 'BUY' ? 'LONG' : 'SHORT'}
+                  </span>
                   <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${selectedTrade.type === 'CE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                     }`}>
                     {selectedTrade.type}
