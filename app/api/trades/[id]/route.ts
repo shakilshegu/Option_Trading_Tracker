@@ -9,11 +9,12 @@ async function getOwned(id: string, userId: string) {
   return Trade.findOne({ _id: id, userId })
 }
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   try {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const trade = await getOwned(params.id, session.user.id)
+    const trade = await getOwned(id, session.user.id)
     if (!trade) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     return NextResponse.json(trade)
   } catch {
@@ -21,12 +22,13 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   try {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const trade = await getOwned(params.id, session.user.id)
+    const trade = await getOwned(id, session.user.id)
     if (!trade) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const body = await req.json()
@@ -60,11 +62,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   try {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const trade = await getOwned(params.id, session.user.id)
+    const trade = await getOwned(id, session.user.id)
     if (!trade) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     await trade.deleteOne()
     return NextResponse.json({ message: 'Deleted' })

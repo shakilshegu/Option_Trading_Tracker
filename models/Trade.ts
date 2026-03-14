@@ -4,8 +4,9 @@ export interface ITrade extends Document {
   userId: mongoose.Types.ObjectId
   date: Date
   day: string
-  time: string
-  symbol: 'NIFTY' | 'BANKNIFTY' | 'FINNIFTY' | 'MIDCPNIFTY' | 'SENSEX' | 'BANKEX'
+  entryTime: string
+  exitTime: string
+  symbol: typeof SYMBOLS[number]
   type: 'CE' | 'PE'
   expiry: Date
   strike: number
@@ -30,7 +31,8 @@ const TradeSchema = new Schema<ITrade>(
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     date: { type: Date, required: true },
     day: { type: String, required: true },
-    time: { type: String, required: true },
+    entryTime: { type: String, required: true },
+    exitTime: { type: String, required: true },
     symbol: { type: String, enum: SYMBOLS, required: true },
     type: { type: String, enum: ['CE', 'PE'], required: true },
     expiry: { type: Date, required: true },

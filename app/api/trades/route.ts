@@ -24,22 +24,26 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const {
-      date, time, symbol, type, expiry, strike,
-      lots, lotSize, entry, exit, charges,
-      setupValid, rulesFollowed, notes,
+      date, day, entryTime, exitTime, symbol, type, expiry,
+      strike, lots, lotSize, entry, exit, charges,
+      setupValid, rulesFollowed, notes
     } = body
 
-    const parsedDate = new Date(date)
-    const day = parsedDate.toLocaleDateString('en-US', { weekday: 'long' })
+    // Validate required fields
+    if (!date || !day || !entryTime || !exitTime || !symbol || !type || !expiry || !strike || !lots || !lotSize || !entry || !exit || charges === undefined) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
     const grossPnL = (exit - entry) * lots * lotSize
     const netPnL = grossPnL - charges
 
     await connectDB()
     const trade = await Trade.create({
       userId: session.user.id,
-      date: parsedDate,
+      date: new Date(date),
       day,
-      time,
+      entryTime,
+      exitTime,
       symbol,
       type,
       expiry: new Date(expiry),
@@ -56,7 +60,8 @@ export async function POST(req: NextRequest) {
       notes: notes || undefined,
     })
     return NextResponse.json(trade, { status: 201 })
-  } catch {
+  } catch (error) {
+    console.error('TRADE_CREATE_ERROR:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

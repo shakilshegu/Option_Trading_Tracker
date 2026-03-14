@@ -10,27 +10,21 @@ export default async function DashboardPage() {
   if (!session) redirect('/auth/signin')
 
   await connectDB()
-  const trades = await Trade.find({ userId: session.user.id }).sort({ createdAt: -1 }).lean()
+  const trades = await Trade.find({ userId: session.user.id }).sort({ date: -1, time: -1 }).lean()
 
   const serialized = (trades as any[]).map((t) => ({
     ...t,
     _id: t._id.toString(),
     userId: t.userId.toString(),
+    date: t.date?.toISOString(),
     expiry: t.expiry?.toISOString(),
     createdAt: t.createdAt?.toISOString(),
     updatedAt: t.updatedAt?.toISOString(),
   }))
 
-  const closedTrades = serialized.filter((t) => t.status === 'Closed')
-  const totalPnL = closedTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0)
-  const winRate = closedTrades.length
-    ? Math.round((closedTrades.filter((t) => (t.pnl ?? 0) > 0).length / closedTrades.length) * 100)
-    : 0
-
   return (
     <DashboardClient
       trades={serialized}
-      stats={{ totalPnL, winRate, total: serialized.length, closed: closedTrades.length }}
       userName={session.user.name ?? 'Trader'}
     />
   )
