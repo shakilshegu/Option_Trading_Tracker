@@ -41,50 +41,50 @@ export default function ForgotPasswordPage() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
-            <div className="w-full max-w-md bg-gray-900 rounded-2xl p-8 shadow-xl border border-gray-800">
-                <h1 className="text-2xl font-bold text-white mb-2">Reset Password</h1>
-                <p className="text-gray-400 text-sm mb-6">Enter your email and a new password.</p>
+        <div className="min-h-screen flex items-center justify-center bg-gray-50/50 px-4">
+            <div className="w-full max-w-md bg-white rounded-[24px] p-8 shadow-xl shadow-gray-200/50 border border-gray-100">
+                <h1 className="text-2xl font-bold text-gray-900 mb-1.5">Reset Password</h1>
+                <p className="text-gray-500 text-sm mb-8">Enter your email and a new password.</p>
 
                 {error && (
-                    <div className="bg-red-900/40 border border-red-700 text-red-300 rounded-lg px-4 py-3 mb-4 text-sm">
+                    <div className="bg-red-50 border border-red-200 text-red-800 rounded-xl px-4 py-3 mb-6 text-sm font-medium">
                         {error}
                     </div>
                 )}
                 {message && (
-                    <div className="bg-emerald-900/40 border border-emerald-700 text-emerald-300 rounded-lg px-4 py-3 mb-4 text-sm">
+                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-3 mb-6 text-sm font-medium">
                         {message}
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-5">
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">Account Email</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">Account Email</label>
                         <input
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
-                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                            className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-sm"
                             placeholder="you@example.com"
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">New Password</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">New Password</label>
                         <div className="relative">
                             <input
                                 type={showPassword ? "text" : "password"}
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
                                 required
-                                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent pr-10"
+                                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-sm pr-10"
                                 placeholder="••••••••"
                                 minLength={6}
                             />
                             <button
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-400 transition-colors p-1"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1"
                                 title={showPassword ? "Hide Password" : "Show Password"}
                             >
                                 {showPassword ? (
@@ -98,15 +98,15 @@ export default function ForgotPasswordPage() {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold rounded-lg py-2.5 transition-colors mt-2"
+                        className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white font-semibold rounded-xl py-3.5 shadow-md shadow-gray-900/10 transition-all active:scale-[0.98] mt-4"
                     >
                         {loading ? 'Resetting…' : 'Reset Password'}
                     </button>
                 </form>
 
-                <p className="mt-6 text-sm text-gray-400 text-center">
+                <p className="mt-8 text-sm text-gray-500 text-center font-medium">
                     Remember your password?{' '}
-                    <Link href="/auth/signin" className="text-emerald-400 hover:underline">Sign In</Link>
+                    <Link href="/auth/signin" className="text-gray-900 font-bold hover:underline">Sign In</Link>
                 </p>
             </div>
         </div>

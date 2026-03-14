@@ -31,38 +31,38 @@ function SignInForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
-      <div className="w-full max-w-md bg-gray-900 rounded-2xl p-8 shadow-xl border border-gray-800">
-        <h1 className="text-2xl font-bold text-white mb-2">Welcome Back</h1>
-        <p className="text-gray-400 text-sm mb-6">Sign in to your trading dashboard</p>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50/50 px-4">
+      <div className="w-full max-w-md bg-white rounded-[24px] p-8 shadow-xl shadow-gray-200/50 border border-gray-100">
+        <h1 className="text-2xl font-bold text-gray-900 mb-1.5">Welcome Back</h1>
+        <p className="text-gray-500 text-sm mb-8">Sign in to your trading dashboard</p>
 
         {params.get('registered') && (
-          <div className="bg-emerald-900/40 border border-emerald-700 text-emerald-300 rounded-lg px-4 py-3 mb-4 text-sm">
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-3 mb-6 text-sm font-medium">
             Account created! Please sign in.
           </div>
         )}
         {error && (
-          <div className="bg-red-900/40 border border-red-700 text-red-300 rounded-lg px-4 py-3 mb-4 text-sm">
+          <div className="bg-red-50 border border-red-200 text-red-800 rounded-xl px-4 py-3 mb-6 text-sm font-medium">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email</label>
             <input
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               required
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-sm"
               placeholder="you@example.com"
             />
           </div>
           <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="block text-sm font-medium text-gray-300">Password</label>
-              <Link href="/auth/forgot-password" className="text-sm font-medium text-emerald-500 hover:text-emerald-400 hover:underline">
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="block text-sm font-semibold text-gray-700">Password</label>
+              <Link href="/auth/forgot-password" className="text-sm font-medium text-emerald-600 hover:text-emerald-500 hover:underline">
                 Forgot password?
               </Link>
             </div>
@@ -72,13 +72,13 @@ function SignInForm() {
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 required
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-sm pr-10"
                 placeholder="••••••••"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-400 transition-colors p-1"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1"
                 title={showPassword ? "Hide Password" : "Show Password"}
               >
                 {showPassword ? (
@@ -92,15 +92,15 @@ function SignInForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold rounded-lg py-2.5 transition-colors"
+            className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white font-semibold rounded-xl py-3.5 shadow-md shadow-gray-900/10 transition-all active:scale-[0.98] mt-4"
           >
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
 
-        <p className="mt-6 text-sm text-gray-400 text-center">
+        <p className="mt-8 text-sm text-gray-500 text-center font-medium">
           No account?{' '}
-          <Link href="/auth/signup" className="text-emerald-400 hover:underline">Create one</Link>
+          <Link href="/auth/signup" className="text-gray-900 font-bold hover:underline">Create one</Link>
         </p>
       </div>
     </div>
