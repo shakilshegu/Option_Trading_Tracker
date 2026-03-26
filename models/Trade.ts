@@ -20,6 +20,7 @@ export interface ITrade extends Document {
   netPnL: number
   setupValid: boolean
   rulesFollowed: boolean
+  isChallengeTrade?: boolean
   notes?: string
   createdAt: Date
   updatedAt: Date
@@ -48,6 +49,7 @@ const TradeSchema = new Schema<ITrade>(
     netPnL: { type: Number, required: true },
     setupValid: { type: Boolean, required: true, default: false },
     rulesFollowed: { type: Boolean, required: true, default: false },
+    isChallengeTrade: { type: Boolean, default: false },
     notes: { type: String },
   },
   { timestamps: true }

@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     const {
       date, day, entryTime, exitTime, symbol, direction, type, expiry,
       strike, lots, lotSize, entry, exit, charges,
-      setupValid, rulesFollowed, notes
+      setupValid, rulesFollowed, isChallengeTrade, notes
     } = body
 
     // Validate required fields
@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
       netPnL,
       setupValid: !!setupValid,
       rulesFollowed: !!rulesFollowed,
+      isChallengeTrade: !!isChallengeTrade,
       notes: notes || undefined,
     })
     return NextResponse.json(trade, { status: 201 })

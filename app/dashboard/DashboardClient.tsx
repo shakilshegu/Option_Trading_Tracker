@@ -23,6 +23,7 @@ interface Trade {
   netPnL: number
   setupValid: boolean
   rulesFollowed: boolean
+  isChallengeTrade?: boolean
   notes?: string
 }
 
@@ -36,6 +37,7 @@ export default function DashboardClient({
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isChallengeModal, setIsChallengeModal] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
   // Modal States
@@ -46,6 +48,9 @@ export default function DashboardClient({
   const [deletePassword, setDeletePassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Tab State
+  const [activeTab, setActiveTab] = useState<'journal' | 'challenge'>('journal')
 
   // Filtering states
   const [filterPeriod, setFilterPeriod] = useState<'all' | 'today' | 'weekly' | 'monthly' | 'custom' | 'profitable' | 'loss'>('all')
@@ -142,6 +147,7 @@ export default function DashboardClient({
       entry: Number(form.entry),
       exit: Number(form.exit),
       charges: Number(form.charges),
+      isChallengeTrade: isChallengeModal,
     }
 
     const res = await fetch('/api/trades', {
@@ -196,6 +202,10 @@ export default function DashboardClient({
   // Derived filtered trades
   const filteredTrades = useMemo(() => {
     return trades.filter((t) => {
+      // Tab-specific split
+      if (activeTab === 'journal' && t.isChallengeTrade) return false
+      if (activeTab === 'challenge' && !t.isChallengeTrade) return false
+
       const tradeDate = new Date(t.date)
       const now = new Date()
       // Reset hours for pure date matching
@@ -229,7 +239,7 @@ export default function DashboardClient({
       }
       return true
     })
-  }, [trades, filterPeriod, customStart, customEnd])
+  }, [trades, filterPeriod, customStart, customEnd, activeTab])
 
   // Calculate paginated trades
   const totalPages = Math.max(1, Math.ceil(filteredTrades.length / itemsPerPage))
@@ -275,6 +285,75 @@ export default function DashboardClient({
     return { totalTrades, winRate, totalPnL, avgWin, avgLoss, profitFactor, totalBrokerage, maxProfitId, maxLossId }
   }, [filteredTrades])
 
+  // Real-time Rule Validation
+  const ruleChecks = useMemo(() => {
+    const isNifty50 = form.symbol === 'NIFTY'
+    const isBuy = form.direction === 'BUY'
+    const instrumentValid = isNifty50 && isBuy
+    
+    const premiumVal = Number(form.entry) || 0
+    const premiumValid = premiumVal >= 100 && premiumVal <= 160
+    
+    let timeValid = false
+    if (form.entryTime) {
+      const [h, m] = form.entryTime.split(':').map(Number)
+      const minutes = h * 60 + m
+      const window1 = minutes >= (9 * 60 + 30) && minutes <= (11 * 60 + 30)
+      const window2 = minutes >= (14 * 60) && minutes <= (15 * 60 + 15)
+      timeValid = window1 || window2
+    }
+
+    const lotsValid = Number(form.lots) === 1
+
+    const tradesOnDate = trades.filter(t => new Date(t.date).toISOString().split('T')[0] === form.date)
+    const limitValid = tradesOnDate.length === 0
+
+    return {
+      instrumentValid,
+      premiumValid,
+      timeValid,
+      lotsValid,
+      limitValid,
+      allValid: instrumentValid && premiumValid && timeValid && lotsValid && limitValid
+    }
+  }, [form.symbol, form.direction, form.entry, form.entryTime, form.lots, form.date, trades])
+
+  useEffect(() => {
+    if (isChallengeModal) {
+      setForm(prev => ({ ...prev, rulesFollowed: ruleChecks.allValid }))
+    }
+  }, [ruleChecks.allValid, isChallengeModal])
+
+  // Tracker Logic
+  const trackerData = useMemo(() => {
+    const activeDates = new Map<string, Trade[]>()
+    trades.filter(t => t.isChallengeTrade).forEach(t => {
+      const d = new Date(t.date).toISOString().split('T')[0]
+      if (!activeDates.has(d)) activeDates.set(d, [])
+      activeDates.get(d)!.push(t)
+    })
+
+    const sortedDates = Array.from(activeDates.keys()).sort()
+    let currentStreak = 0
+
+    sortedDates.forEach(dateStr => {
+      const dayTrades = activeDates.get(dateStr)!
+      let isWin = false
+      
+      if (dayTrades.length === 1 && dayTrades[0].rulesFollowed) {
+        isWin = true
+      }
+
+      if (isWin) {
+        currentStreak += 1
+      } else {
+        currentStreak = 0
+      }
+    })
+
+    return { currentStreak: Math.min(currentStreak, 100) }
+  }, [trades])
+
   return (
     <div className="min-h-screen bg-gray-50/50 text-gray-900 font-sans relative">
       {/* Toast Notification */}
@@ -287,17 +366,35 @@ export default function DashboardClient({
 
       {/* Header */}
       <header className="border-b border-gray-200 bg-white shadow-sm sticky top-0 z-10 w-full">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+          <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent hidden sm:block">
             Option Tracker
           </h1>
+          
+          <div className="flex bg-gray-100/80 p-1 rounded-xl border border-gray-200/60 shadow-inner">
+            <button
+              onClick={() => setActiveTab('journal')}
+              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'journal' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Trade Journal
+            </button>
+            <button
+              onClick={() => setActiveTab('challenge')}
+              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${activeTab === 'challenge' ? 'bg-indigo-600 shadow text-white' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+              100-Day Challenge
+            </button>
+          </div>
+
           <div className="flex items-center gap-4">
-            <span className="text-gray-600 text-sm font-medium">Hello, {userName}</span>
+            <span className="text-gray-600 text-sm font-medium hidden md:inline-block">Hello, {userName}</span>
             <button
               onClick={() => signOut({ callbackUrl: '/' })}
-              className="text-sm font-medium text-gray-500 hover:text-red-600 transition-colors"
+              className="text-sm font-medium text-gray-400 hover:text-red-600 transition-colors"
+              title="Sign out"
             >
-              Sign out
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
             </button>
           </div>
         </div>
@@ -390,13 +487,25 @@ export default function DashboardClient({
             )}
           </div>
 
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow-sm transition-colors text-sm flex items-center gap-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            Log New Trade
-          </button>
+          <div className="flex gap-3">
+            {activeTab === 'journal' ? (
+              <button
+                onClick={() => { setIsChallengeModal(false); setIsModalOpen(true); }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow-sm transition-colors text-sm flex items-center gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Log New Trade
+              </button>
+            ) : (
+              <button
+                onClick={() => { setIsChallengeModal(true); setIsModalOpen(true); }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow-sm transition-colors text-sm flex items-center gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Log Challenge Trade
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Dashboard Stats Bar */}
@@ -421,10 +530,112 @@ export default function DashboardClient({
           ))}
         </div>
 
+        {/* 100-Day Discipline Challenge Card */}
+        <div style={{ display: activeTab === 'challenge' ? 'block' : 'none' }}>
+        <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 shadow-xl shadow-indigo-900/10 mb-8 relative overflow-hidden ring-1 ring-white/10">
+          {/* Decorative elements */}
+          <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
+            <svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+          </div>
+          
+          <div className="relative z-10">
+            <div className="flex items-center gap-3 mb-5">
+              <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest flex items-center gap-1.5 shadow-inner">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                </span>
+                Active Challenge
+              </span>
+              <h2 className="text-xl font-bold text-white tracking-tight">100-Day Nifty 50 Discipline</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Box 1 */}
+              <div className="bg-white/5 rounded-xl p-4 backdrop-blur-md border border-white/10 hover:bg-white/10 transition-colors shadow-sm">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-4 h-4 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <h3 className="text-indigo-200 text-xs font-bold uppercase tracking-wider">Setup & Instrument</h3>
+                </div>
+                <ul className="space-y-2 text-sm text-gray-300">
+                  <li className="flex items-start gap-2"><span className="text-indigo-500 mt-0.5">•</span> <span><strong className="text-white font-medium">Nifty 50 Options</strong> (CE/PE Buy Only)</span></li>
+                  <li className="flex items-start gap-2"><span className="text-indigo-500 mt-0.5">•</span> <span>Premium: <strong className="text-white font-medium">₹100 – ₹160</strong></span></li>
+                  <li className="flex items-start gap-2"><span className="text-indigo-500 mt-0.5">•</span> <span>Delta: <strong className="text-white font-medium">0.4 – 0.6</strong> (Balanced Risk)</span></li>
+                </ul>
+              </div>
+              
+              {/* Box 2 */}
+              <div className="bg-white/5 rounded-xl p-4 backdrop-blur-md border border-white/10 hover:bg-white/10 transition-colors shadow-sm">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-4 h-4 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <h3 className="text-indigo-200 text-xs font-bold uppercase tracking-wider">Execution Timing</h3>
+                </div>
+                <ul className="space-y-2 text-sm text-gray-300">
+                  <li className="flex items-start gap-2"><span className="text-emerald-400 mt-0.5">✓</span> <span>Morning: <strong className="text-white font-medium">9:30 AM – 11:30 AM</strong></span></li>
+                  <li className="flex items-start gap-2"><span className="text-emerald-400 mt-0.5">✓</span> <span>Afternoon: <strong className="text-white font-medium">2:00 PM – 3:15 PM</strong></span></li>
+                  <li className="flex items-start gap-2"><span className="text-indigo-500 mt-0.5">•</span> <span>Limit: <strong className="text-white font-medium bg-white/10 px-1.5 py-0.5 rounded">1 Trade/Day</strong> | <strong className="text-white font-medium bg-white/10 px-1.5 py-0.5 rounded">1 Lot</strong></span></li>
+                </ul>
+              </div>
+
+              {/* Box 3 - Strict Rule */}
+              <div className="bg-gradient-to-br from-red-500/10 to-red-900/20 rounded-xl p-4 backdrop-blur-md border border-red-500/20 hover:border-red-500/30 transition-colors flex flex-col justify-center relative overflow-hidden group shadow-sm">
+                <div className="absolute inset-0 bg-red-500/5 group-hover:bg-red-500/10 transition-colors pointer-events-none"></div>
+                <div className="relative z-10 flex flex-col gap-3 h-full justify-between">
+                  <div className="flex items-center justify-between">
+                     <h3 className="text-red-300 text-xs font-bold uppercase tracking-widest bg-red-500/10 px-2 py-1 rounded inline-block border border-red-500/20">Target Rule</h3>
+                  </div>
+                  <div className="text-center bg-black/20 rounded-lg py-2.5 border border-red-500/10 shadow-inner">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 font-medium">Risk : Reward Min</p>
+                    <p className="text-2xl font-black text-white tracking-tight drop-shadow-sm">1 : 2</p>
+                  </div>
+                  <div className="bg-red-500/20 px-3 py-2.5 rounded-lg border border-red-500/30 flex items-center gap-2.5 shadow-sm">
+                    <span className="text-lg animate-pulse drop-shadow-md">🚨</span>
+                    <p className="text-xs font-medium text-red-100 leading-tight">
+                      Break any rule → <span className="text-white font-bold bg-gradient-to-r from-red-600 to-red-700 px-1.5 py-0.5 rounded shadow-sm whitespace-nowrap">Restart Day 1 ✅</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Visual 100-Day Tracker Grid */}
+            <div className="mt-8 pt-6 border-t border-white/10">
+              <div className="flex flex-col md:flex-row items-start md:items-end justify-between mb-4 gap-4">
+                <div>
+                  <h3 className="text-white font-bold tracking-wide text-lg flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    Current Streak: <span className="text-emerald-400">{trackerData.currentStreak} <span className="text-gray-400 text-sm font-medium">/ 100 Days</span></span>
+                  </h3>
+                  <p className="text-xs text-gray-400 font-medium mt-1">Completing 1 trade strictly following all rules adds a day. Any deviation resets to 0.</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5 md:gap-2 bg-black/20 p-4 rounded-xl border border-white/5">
+                {Array.from({ length: 100 }).map((_, i) => {
+                  const isCompleted = i < trackerData.currentStreak;
+                  const isCurrent = i === trackerData.currentStreak;
+                  return (
+                    <div 
+                      key={i} 
+                      className={`w-[18px] h-[18px] md:w-5 md:h-5 rounded-[4px] md:rounded-md transition-all ${
+                        isCompleted ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.7)]' : 
+                        isCurrent ? 'bg-indigo-500 animate-pulse ring-2 ring-indigo-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_12px_rgba(99,102,241,0.8)] z-10 scale-110' : 
+                        'bg-white/5 border border-white/10'
+                      }`}
+                      title={`Day ${i + 1}${isCompleted ? ' (Completed)' : ''}`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+          </div>
+        </div>
+        </div>
+
         {/* Trade Journal Table Full Width */}
         <div className="bg-white shadow-sm border border-gray-200 overflow-hidden w-full mb-8">
           <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50/80">
-            <h2 className="text-lg font-bold text-gray-800">Trade Journal</h2>
+            <h2 className="text-lg font-bold text-gray-800">{activeTab === 'challenge' ? 'Challenge Trade Journal' : 'Trade Journal'}</h2>
             <span className="text-sm text-gray-500 font-medium bg-white border border-gray-200 shadow-sm px-3 py-1 rounded-md">{filteredTrades.length} records found</span>
           </div>
 
@@ -658,7 +869,9 @@ export default function DashboardClient({
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
 
-            <h2 className="text-xl font-bold text-gray-800 border-b border-gray-100 pb-4 mb-6 pr-8">Log New Trade</h2>
+            <h2 className="text-xl font-bold text-gray-800 border-b border-gray-100 pb-4 mb-6 pr-8">
+              {isChallengeModal ? 'Log Challenge Trade' : 'Log New Trade'}
+            </h2>
 
             <form onSubmit={handleAddTrade} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -677,6 +890,8 @@ export default function DashboardClient({
                   <input
                     type="time"
                     required
+                    min="09:15"
+                    max="15:30"
                     value={form.entryTime}
                     onChange={(e) => setForm({ ...form, entryTime: e.target.value })}
                     className="w-full rounded-lg border-gray-300 bg-gray-50 text-sm focus:ring-2 focus:ring-indigo-500 p-2 border"
@@ -690,6 +905,8 @@ export default function DashboardClient({
                   <input
                     type="time"
                     required
+                    min="09:15"
+                    max="15:30"
                     value={form.exitTime}
                     onChange={(e) => setForm({ ...form, exitTime: e.target.value })}
                     className="w-full rounded-lg border-gray-300 bg-gray-50 text-sm focus:ring-2 focus:ring-indigo-500 p-2 border"
@@ -843,16 +1060,52 @@ export default function DashboardClient({
                   />
                   Setup Valid
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={form.rulesFollowed}
-                    onChange={(e) => setForm({ ...form, rulesFollowed: e.target.checked })}
-                    className="rounded text-indigo-600 focus:ring-indigo-500 border-gray-300 w-4 h-4 cursor-pointer"
-                  />
-                  Rules Followed
-                </label>
+                {isChallengeModal ? (
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 opacity-60 cursor-not-allowed">
+                    <input
+                      type="checkbox"
+                      checked={form.rulesFollowed}
+                      readOnly
+                      className="rounded text-indigo-600 border-gray-300 w-4 h-4 cursor-not-allowed pointer-events-none"
+                    />
+                    Rules Followed (Auto)
+                  </label>
+                ) : (
+                  <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={form.rulesFollowed}
+                      onChange={(e) => setForm({ ...form, rulesFollowed: e.target.checked })}
+                      className="rounded text-indigo-600 focus:ring-indigo-500 border-gray-300 w-4 h-4 cursor-pointer"
+                    />
+                    Rules Followed
+                  </label>
+                )}
               </div>
+
+              {/* Real-Time Rule Tracker */}
+              {isChallengeModal && (
+                <div className="bg-slate-900 rounded-xl p-4 border border-indigo-500/30 shadow-inner mt-2">
+                  <h4 className="text-indigo-200 text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    100-Day Challenge Live Validator
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] md:text-xs">
+                    <div className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border font-medium ${ruleChecks.instrumentValid ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                      <span>{ruleChecks.instrumentValid ? '✓' : '×'}</span> Nifty 50 Buy (CE/PE)
+                    </div>
+                    <div className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border font-medium ${ruleChecks.premiumValid ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                      <span>{ruleChecks.premiumValid ? '✓' : '×'}</span> Premium ₹100-160
+                    </div>
+                    <div className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border font-medium ${ruleChecks.timeValid ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                      <span>{ruleChecks.timeValid ? '✓' : '×'}</span> Correct Time Window
+                    </div>
+                    <div className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border font-medium ${ruleChecks.lotsValid && ruleChecks.limitValid ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                      <span>{ruleChecks.lotsValid && ruleChecks.limitValid ? '✓' : '×'}</span> 1 Trade & 1 Lot Only
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
