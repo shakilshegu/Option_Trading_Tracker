@@ -481,8 +481,8 @@ export default function DashboardClient({
                             </span>
                             <span className="font-medium text-gray-700">Strike: {trade.strike}</span>
                           </div>
-                          <p className="text-[11px] text-gray-600 whitespace-nowrap">
-                            {trade.lots} lots ({trade.lots * trade.lotSize} qty) • exp {new Date(trade.expiry).toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' })}
+                          <p className="text-[11px] text-gray-600 whitespace-nowrap" suppressHydrationWarning>
+                            {trade.lots} lots ({trade.lots * trade.lotSize} qty) {trade.expiry ? `• exp ${new Date(trade.expiry).toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' })}` : ''}
                           </p>
                         </td>
                         <td className="py-3 px-4 text-right align-top border-r border-gray-200">
@@ -924,7 +924,7 @@ export default function DashboardClient({
                 <div>
                   <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1">Expiry</p>
                   <p className="font-semibold text-gray-800 text-sm" suppressHydrationWarning>
-                    {new Date(selectedTrade.expiry).toLocaleDateString()}
+                    {selectedTrade.expiry ? new Date(selectedTrade.expiry).toLocaleDateString() : 'N/A'}
                   </p>
                 </div>
               </div>
